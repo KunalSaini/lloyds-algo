@@ -5,6 +5,7 @@ import glob
 import random
 import math
 from functools import reduce
+import os
 import matplotlib.pyplot as plt
 from matplotlib import colors as mcolors
 from os import system, name 
@@ -24,7 +25,8 @@ def clear():
 def GetInputDataFile():
     '''
     get user input for which data file to run algo on
-    also get number of centroids
+    also get number of centroids to compute and whether to
+    save scatter plot images or not
     '''
     clear()
     dataFile = None
@@ -40,7 +42,13 @@ def GetInputDataFile():
         GetInputDataFile()
 
     k = int(input("enter number of clusters to compute "))
-    return (dataFile, k)
+    YES_VALUES = {'y', 'yes', 'Y'}
+    saveScatterPlots = input("save scatter plot for each iteration ? (y,N) ").lower() in YES_VALUES
+    if(saveScatterPlots):
+        print('scatter plots will be saved in ./images/ folder')
+
+    print('output csv files will be store in ./output/ folder')
+    return (dataFile, k, saveScatterPlots)
 
 
 def GetDistance(x, y):
@@ -113,7 +121,7 @@ def plotAndSave(nbr, centroides, mapped):
     plt.close()
 
 
-def CalculatePartitions(data, k, epsilon, maxIterations):
+def CalculatePartitions(data, k, epsilon, maxIterations, saveScatterPlot = False):
     '''
     cluster data in k centroids based on lloyds algorithm
     '''
@@ -126,7 +134,8 @@ def CalculatePartitions(data, k, epsilon, maxIterations):
     ## repeat unit no change in clusters
     while significientDifference:
         print('iteration', itr)
-        plotAndSave(itr, centroides, mapped)
+        if saveScatterPlot:
+            plotAndSave(itr, centroides, mapped)
         itr += 1
         newCentroides, diffVector = Update(centroides, mapped)
         if sum(diffVector) < epsilon or itr > maxIterations:
@@ -134,20 +143,42 @@ def CalculatePartitions(data, k, epsilon, maxIterations):
         if significientDifference:
             centroides = newCentroides
             mapped = Assign(centroides, data)
+    
+    C = [centroides.index(x['closestCentroid'])+1 for x in mapped]
+    # OUTPUT
+    # (i) - centroides matrix 
+    # (ii) - cluster index vector C ∈{ 1,2,3…K }^N, Where C(i)=j indicates that the ith row of X belongs to cluster j
+    return (centroides, C)
 
 if __name__ == "__main__":
-    dataFile, k = GetInputDataFile()
+    dataFile, k, saveScatterPlots = GetInputDataFile()
     print(f"reading file from {dataFile}")
     data = []
     with open(dataFile, 'r') as csvfile:
         spamreader = csv.reader(csvfile, delimiter=',')
         for row in spamreader:
             dataRow = [float(row[0]),float(row[1])]
-            #dataRow.append(float(row[0]))
-            #dataRow.append(float(row[1]))
             data.append(dataRow)
 
     EPSILON = 10**-5
-    MAX_ITERATIONS = 30
+    MAX_ITERATIONS = 50
     colors = list(mcolors.CSS4_COLORS.keys())
-    CalculatePartitions(data, k, EPSILON, MAX_ITERATIONS)
+    centroides, C =  CalculatePartitions(data, k, EPSILON, MAX_ITERATIONS, saveScatterPlots)
+    
+    # populate output data structure
+    # (i) 
+    # writing final centroid matrix to "input file name".centroids.csv
+    _, tail = os.path.split(dataFile)
+    centroidOutputFile = os.path.join('output', tail + '.centroids.csv')
+    with open(centroidOutputFile, 'w') as csvfile:
+        spamwriter = csv.writer(csvfile, delimiter=',')
+        spamwriter.writerows(centroides)
+
+    # (ii)  writing final Cluster index vector to "input file name".clusterIndexVector.csv
+    # C ∈{ 1,2,3…K }^N, Where C(i)=j indicates that the ith row of X belongs to cluster j
+    # C = [centroides.index(x['closestCentroid'])+1 for x in mappedDataStructure]
+    
+    clusterIndexVectorFileName = os.path.join('output', tail + '.clusterIndexVector.csv')
+    with open(clusterIndexVectorFileName, 'w') as csvfile:
+        spamwriter = csv.writer(csvfile, delimiter=',')
+        spamwriter.writerow(C)
